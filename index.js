@@ -144,14 +144,14 @@ module.exports = class Projection extends Module {
                         }
 
                         return doc[funcName](req).then((val) => {
-                            if (val !== null || val !== undefined) {
+                            if (val !== null && val !== undefined) {
                                 fieldValue = val;
                             }
                             return resolve();
                         });
                     } else {
                         var value = doc.get(field);
-                        if (value !== null || value !== undefined) {
+                        if (value !== null && value !== undefined) {
                             fieldValue = value;
                         }
                         return resolve();
