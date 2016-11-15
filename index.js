@@ -130,7 +130,7 @@ module.exports = class Projection extends Module {
             return Promise.mapSeries(fields, (field) => {
                 return new Promise((resolve, reject) => {
                     // if a value already has been found, skip everything else
-                    if (fieldValue !== null || fieldValue !== undefined) {
+                    if (fieldValue !== null && fieldValue !== undefined) {
                         return resolve();
                     }
 
