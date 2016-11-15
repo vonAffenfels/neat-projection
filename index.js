@@ -130,7 +130,7 @@ module.exports = class Projection extends Module {
             return Promise.mapSeries(fields, (field) => {
                 return new Promise((resolve, reject) => {
                     // if a value already has been found, skip everything else
-                    if (fieldValue) {
+                    if (fieldValue !== null || fieldValue !== undefined) {
                         return resolve();
                     }
 
@@ -144,12 +144,14 @@ module.exports = class Projection extends Module {
                         }
 
                         return doc[funcName](req).then((val) => {
-                            fieldValue = val;
+                            if (val !== null || val !== undefined) {
+                                fieldValue = val;
+                            }
                             return resolve();
                         });
                     } else {
                         var value = doc.get(field);
-                        if (value) {
+                        if (value !== null || value !== undefined) {
                             fieldValue = value;
                         }
                         return resolve();
