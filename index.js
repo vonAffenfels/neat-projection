@@ -62,14 +62,13 @@ module.exports = class Projection extends Module {
             return new Promise((resolve, reject) => {
                 // first run the regular query
                 return proto._neatProjectionSavedExec.apply(this, arguments).then((docs) => {
-                    // for easier processing turn findOne result into an array
                     if (this.op === "findOne") {
-                        docs = [docs];
+                        return self.getDocumentProjection(docs, this._neatProjectionPackage, this._neatProjectionRequest);
+                    } else {
+                        return Promise.map(docs, (doc) => {
+                            return self.getDocumentProjection(doc, this._neatProjectionPackage, this._neatProjectionRequest);
+                        })
                     }
-
-                    return Promise.map(docs, (doc) => {
-                        return self.getDocumentProjection(doc, this._neatProjectionPackage, this._neatProjectionRequest);
-                    })
                 }).then(resolve, reject);
             });
         }
