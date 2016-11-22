@@ -43,6 +43,7 @@ module.exports = class Projection extends Module {
         proto.projection = function (pkg, req) {
             this._neatProjectionPackage = pkg;
             this._neatProjectionRequest = req;
+            return this;
         };
         proto.exec = function () {
 
