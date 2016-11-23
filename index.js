@@ -45,6 +45,9 @@ module.exports = class Projection extends Module {
             this._neatProjectionRequest = req;
             return this;
         };
+        proto.project = function(pkg, req) {
+            return self.getDocumentProjection(this, pkg, req);
+        };
         proto.exec = function () {
 
             // dont do anything if not active
