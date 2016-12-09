@@ -45,7 +45,9 @@ module.exports = class Projection extends Module {
             this._neatProjectionRequest = req;
             return this;
         };
-        proto.project = function(pkg, req) {
+
+        let protoModel = Application.modules[this.config.dbModuleName].mongoose.Model.prototype;
+        protoModel.project = function(pkg, req) {
             return self.getDocumentProjection(this, pkg, req);
         };
         proto.exec = function () {
