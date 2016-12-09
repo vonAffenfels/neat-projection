@@ -1,11 +1,11 @@
 "use strict";
 
 // @IMPORTS
-var Application = require("neat-base").Application;
-var Module = require("neat-base").Module;
-var Tools = require("neat-base").Tools;
-var fs = require("fs");
-var Promise = require("bluebird");
+const Application = require("neat-base").Application;
+const Module = require("neat-base").Module;
+const Tools = require("neat-base").Tools;
+const fs = require("fs");
+const Promise = require("bluebird");
 
 module.exports = class Projection extends Module {
 
@@ -37,8 +37,8 @@ module.exports = class Projection extends Module {
      *
      */
     initMongoose() {
-        var self = this;
-        var proto = Application.modules[this.config.dbModuleName].mongoose.Query.prototype;
+        let self = this;
+        let proto = Application.modules[this.config.dbModuleName].mongoose.Query.prototype;
         proto._neatProjectionSavedExec = proto.exec;
         proto.projection = function (pkg, req) {
             this._neatProjectionPackage = pkg;
@@ -93,7 +93,7 @@ module.exports = class Projection extends Module {
             return Promise.reject(new Error("missing package for projection"));
         }
 
-        var modelName = doc.constructor.modelName;
+        let modelName = doc.constructor.modelName;
 
         if (!this.config.projections[modelName]) {
             return Promise.reject(new Error("No projection configured for model " + modelName));
@@ -103,10 +103,10 @@ module.exports = class Projection extends Module {
             return Promise.reject(new Error("No projection configured for model " + modelName + " and package " + pkg));
         }
 
-        var conf = this.config.projections[modelName][pkg];
+        let conf = this.config.projections[modelName][pkg];
 
         return new Promise((resolve, reject) => {
-            var result = {};
+            let result = {};
 
             return Promise.map(Object.keys(conf), (field) => {
                 return this.getFieldProjection(field, conf[field], doc, req).then((data) => {
@@ -127,8 +127,8 @@ module.exports = class Projection extends Module {
      */
     getFieldProjection(field, config, doc, req) {
         return new Promise((resolve, reject) => {
-            var fields = this.getFieldArrayFromProjectionConfig(config);
-            var fieldValue = null;
+            let fields = this.getFieldArrayFromProjectionConfig(config);
+            let fieldValue = null;
 
             return Promise.mapSeries(fields, (field) => {
                 return new Promise((resolve, reject) => {
@@ -137,11 +137,11 @@ module.exports = class Projection extends Module {
                         return resolve();
                     }
 
-                    if (field.indexOf("_") === 0) {
-                        var funcName = this.getFuncNameFromField(field);
+                    if (field.indexOf("_") === 0 && !doc.schema.path(field)) {
+                        let funcName = this.getFuncNameFromField(field);
 
                         if (!doc[funcName]) {
-                            var err = new Error("Projection function " + funcName + " missing on model " + doc.constructor.modelName);
+                            let err = new Error("Projection function " + funcName + " missing on model " + doc.constructor.modelName);
                             this.log.error(err);
                             return reject(err);
                         }
@@ -153,7 +153,7 @@ module.exports = class Projection extends Module {
                             return resolve();
                         });
                     } else {
-                        var value = doc.get(field);
+                        let value = doc.get(field);
                         if (value !== null && value !== undefined) {
                             fieldValue = value;
                         }
