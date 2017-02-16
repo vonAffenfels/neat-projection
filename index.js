@@ -18,6 +18,11 @@ module.exports = class Projection extends Module {
                         name: "username",
                     }
                 }
+            },
+            permissions: {
+                public: [
+                    "user.list"
+                ]
             }
         }
     }
@@ -47,7 +52,7 @@ module.exports = class Projection extends Module {
         };
 
         let protoModel = Application.modules[this.config.dbModuleName].mongoose.Model.prototype;
-        protoModel.project = function(pkg, req) {
+        protoModel.project = function (pkg, req) {
             return self.getDocumentProjection(this, pkg, req);
         };
         proto.exec = function () {
@@ -78,6 +83,45 @@ module.exports = class Projection extends Module {
                 }).then(resolve, reject);
             });
         }
+    }
+
+    /**
+     *
+     * @param {Document} user
+     * @param {string} modelName
+     * @param {string} projection
+     */
+    hasPermission(user, modelName, projection) {
+        let projectionName = modelName + "." + projection;
+        let permissionName = "projection." + projectionName;
+
+        // check if the projection even exists
+        if (!this.config.projections[modelName]) {
+            this.log.warn("missing model definition for projection " + projectionName);
+            return false;
+        } else if (!this.config.projections[modelName][projection]) {
+            this.log.warn("missing projection " + projectionName);
+            return false;
+        }
+
+        // check if its public
+        if (this.config.permissions.public.indexOf(projectionName) !== -1) {
+            return true;
+        }
+
+        // so not public, do we have a user ?
+        if (!user) {
+            return false;
+        }
+
+        // ok does the user have the permission to use this projection
+        if (user.hasPermission(permissionName)) {
+            this.log.warn("User " + user.username + " tried to use projection " + permissionName + " but didn't have permission");
+            return false;
+        }
+
+        // always default to no permissions
+        return false;
     }
 
     /**
