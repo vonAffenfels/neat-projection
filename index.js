@@ -12,6 +12,7 @@ module.exports = class Projection extends Module {
     static defaultConfig() {
         return {
             dbModuleName: "database",
+            publish: null,
             projections: {
                 user: {
                     list: {
@@ -33,6 +34,12 @@ module.exports = class Projection extends Module {
     init() {
         return new Promise((resolve, reject) => {
             this.log.debug("Initializing...");
+
+            // only register the models if needed, pointless otherwise...
+            if (this.config.publish) {
+                Application.modules[this.config.dbModuleName].registerModel("published", require("./models/published.js"));
+            }
+
             this.initMongoose();
             resolve(this);
         });
@@ -150,6 +157,7 @@ module.exports = class Projection extends Module {
         }
 
         let conf = this.config.projections[modelName][pkg];
+        conf["_id"] = "_id";
 
         return new Promise((resolve, reject) => {
             let result = {};
@@ -236,5 +244,112 @@ module.exports = class Projection extends Module {
     getFuncNameFromField(field) {
         field = field.substr(1);
         return "get" + Tools.capitalizeFirstLetter(field);
+    }
+
+    modifySchema(modelName, schema) {
+        // dont add publish hooks if unnecessary
+        if (!this.config.publish || !this.config.publish[modelName]) {
+            return;
+        }
+
+        let moduleSelf = this;
+
+        schema.post("save", function () {
+            moduleSelf.publish(modelName, this.get("_id"));
+        });
+
+        schema.post("remove", function () {
+            moduleSelf.depublish(modelName, this.get("_id"));
+        });
+    }
+
+    /**
+     *
+     * @param modelName
+     * @param _id
+     * @param projection
+     */
+    depublish(modelName, _id, projection) {
+        this.log.debug("Depublishing " + modelName + " with id " + _id);
+        let publishedModel = Application.modules[this.config.dbModuleName].getModel("published");
+        let query = {
+            _id: _id,
+            model: modelName
+        };
+
+        // if a condition failed, this function will be given the projection, so only include it if present
+        if (projection) {
+            query.projection = projection;
+        }
+
+        return publishedModel.remove(query);
+    }
+
+    /**
+     *
+     * @param modelName
+     * @param _id
+     * @returns {Promise.<T>}
+     */
+    publish(modelName, _id) {
+        // dont do anything if it doesnt exist
+        if (!this.config.publish || !this.config.publish[modelName]) {
+            return Promise.resolve();
+        }
+
+        let publishConfig = this.config.publish[modelName];
+        let publishedModel = Application.modules[this.config.dbModuleName].getModel("published");
+        let model = Application.modules[this.config.dbModuleName].getModel(modelName);
+
+        // get the original doc
+        return model.findOne({
+            _id: _id
+        }).then((doc) => {
+            return Promise.map(Object.keys(publishConfig), (projection) => {
+
+                // Check if there are any conditions to this publication, if so check them
+                let shouldPublish = true;
+                if (publishConfig[projection] !== true && publishConfig[projection].condition) {
+                    for (let path in publishConfig[projection].condition) {
+                        let value = publishConfig[projection].condition[path];
+                        let docValue = doc.get(path);
+
+                        this.log.debug("Checking publish condition on " + path + " with required value " + value + " document value is " + docValue);
+                        if (docValue != value) {
+                            this.log.debug("Condition didnt pass, dont publish");
+                            shouldPublish = false;
+                        }
+                    }
+                }
+
+                // Conditions failed, so depublish this document in case it was published earlier
+                if (!shouldPublish) {
+                    return this.depublish(modelName, _id, projection);
+                }
+
+                // get the projection
+                return doc.project(projection).then((result) => {
+                    // upsert the final published document
+                    return publishedModel.update({
+                        model: modelName,
+                        projection: projection,
+                        refId: result._id
+                    }, {
+                        model: modelName,
+                        projection: projection,
+                        data: result,
+                        refId: result._id,
+                        _updatedAt: new Date()
+                    }, {
+                        upsert: true
+                    }).then(() => {
+                        this.log.debug("Published " + result._id + " for " + projection);
+                    }, (err) => {
+                        this.log.warn("Error while publishing");
+                        this.log.warn(err);
+                    });
+                });
+            });
+        });
     }
 }
