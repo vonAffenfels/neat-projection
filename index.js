@@ -273,7 +273,7 @@ module.exports = class Projection extends Module {
         this.log.debug("Depublishing " + modelName + " with id " + _id);
         let publishedModel = Application.modules[this.config.dbModuleName].getModel("published");
         let query = {
-            _id: _id,
+            refId: _id,
             model: modelName
         };
 
@@ -304,8 +304,13 @@ module.exports = class Projection extends Module {
         // get the original doc
         return model.findOne({
             _id: _id
-        }).populate(publishConfig.populate || []).then((doc) => {
+        }).populate(publishConfig.__populate || []).then((doc) => {
             return Promise.map(Object.keys(publishConfig), (projection) => {
+
+                // ignore populate
+                if (projection === "__populate") {
+                    return;
+                }
 
                 // Check if there are any conditions to this publication, if so check them
                 let shouldPublish = true;
