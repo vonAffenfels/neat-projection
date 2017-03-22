@@ -304,7 +304,7 @@ module.exports = class Projection extends Module {
         // get the original doc
         return model.findOne({
             _id: _id
-        }).then((doc) => {
+        }).populate(publishConfig.populate || []).then((doc) => {
             return Promise.map(Object.keys(publishConfig), (projection) => {
 
                 // Check if there are any conditions to this publication, if so check them
