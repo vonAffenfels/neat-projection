@@ -183,6 +183,7 @@ module.exports = class Projection extends Module {
         return new Promise((resolve, reject) => {
             let fields = this.getFieldArrayFromProjectionConfig(config);
             let fieldValue = null;
+            let mongoose = Application.modules[this.config.dbModuleName].mongoose;
 
             return Promise.mapSeries(fields, (field) => {
                 return new Promise((resolve, reject) => {
@@ -209,6 +210,19 @@ module.exports = class Projection extends Module {
                     } else {
                         let value = doc.get(field);
                         if (value !== null && value !== undefined) {
+
+                            // check for mongoose documents, toJSON needs to be called otherwise virtuals wont be published!
+                            if (value instanceof Array) {
+                                for (let i = 0; i < value.length; i++) {
+                                    let subArrVal = value[i];
+                                    if (subArrVal instanceof mongoose.Model) {
+                                        value[i] = subArrVal.toJSON();
+                                    }
+                                }
+                            } else if (value instanceof mongoose.Model) {
+                                value = value.toJSON();
+                            }
+
                             fieldValue = value;
                         }
                         return resolve();
