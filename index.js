@@ -60,7 +60,20 @@ module.exports = class Projection extends Module {
 
         let protoModel = Application.modules[this.config.dbModuleName].mongoose.Model.prototype;
         protoModel.project = function (pkg, req) {
-            return self.getDocumentProjection(this, pkg, req);
+            // check requested package for populate
+            let modelName = this.constructor.modelName;
+            let populateProm = Promise.resolve();
+
+            if (self.config.projections[modelName] && self.config.projections[modelName][pkg]) {
+                let conf = self.config.projections[modelName][pkg];
+                if (conf.__populate) {
+                    populateProm = this.populate(conf.__populate).execPopulate();
+                }
+            }
+
+            return populateProm.then(() => {
+                return self.getDocumentProjection(this, pkg, req);
+            });
         };
         proto.exec = function () {
 
@@ -78,6 +91,15 @@ module.exports = class Projection extends Module {
             }
 
             return new Promise((resolve, reject) => {
+                // check requested package for populate
+                let modelName = this.model.modelName;
+                if (self.config.projections[modelName] && self.config.projections[modelName][this._neatProjectionPackage]) {
+                    let conf = self.config.projections[modelName][this._neatProjectionPackage];
+                    if (conf.__populate) {
+                        this.populate(conf.__populate);
+                    }
+                }
+
                 // first run the regular query
                 return proto._neatProjectionSavedExec.apply(this, arguments).then((docs) => {
                     if (this.op === "findOne") {
@@ -163,6 +185,10 @@ module.exports = class Projection extends Module {
             let result = {};
 
             return Promise.map(Object.keys(conf), (field) => {
+                if (field === "__populate") {
+                    return;
+                }
+
                 return this.getFieldProjection(field, conf[field], doc, req).then((data) => {
                     result[field] = data;
                 });
@@ -318,14 +344,8 @@ module.exports = class Projection extends Module {
         // get the original doc
         return model.findOne({
             _id: _id
-        }).populate(publishConfig.__populate || []).then((doc) => {
+        }).then((doc) => {
             return Promise.map(Object.keys(publishConfig), (projection) => {
-
-                // ignore populate
-                if (projection === "__populate") {
-                    return;
-                }
-
                 // Check if there are any conditions to this publication, if so check them
                 let shouldPublish = true;
                 if (publishConfig[projection] !== true && publishConfig[projection].condition) {
