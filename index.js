@@ -145,8 +145,9 @@ module.exports = class Projection extends Module {
 
         // ok does the user have the permission to use this projection
         if (user.hasPermission(permissionName)) {
+            return true;
+        } else {
             this.log.warn("User " + user.username + " tried to use projection " + permissionName + " but didn't have permission");
-            return false;
         }
 
         // always default to no permissions
@@ -305,7 +306,7 @@ module.exports = class Projection extends Module {
 
     /**
      *
-     * @param modelName
+     * @param modelNamey
      * @param _id
      * @param projection
      */
