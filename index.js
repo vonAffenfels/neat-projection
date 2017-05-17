@@ -243,11 +243,17 @@ module.exports = class Projection extends Module {
                                 for (let i = 0; i < value.length; i++) {
                                     let subArrVal = value[i];
                                     if (subArrVal instanceof mongoose.Model) {
-                                        value[i] = subArrVal.toJSON();
+                                        value[i] = subArrVal.toJSON({
+                                            getters: true,
+                                            virtuals: true
+                                        });
                                     }
                                 }
                             } else if (value instanceof mongoose.Model) {
-                                value = value.toJSON();
+                                value = value.toJSON({
+                                    getters: true,
+                                    virtuals: true
+                                });
                             }
 
                             fieldValue = value;
