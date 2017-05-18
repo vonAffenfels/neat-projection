@@ -215,7 +215,7 @@ module.exports = class Projection extends Module {
             return Promise.mapSeries(fields, (field) => {
                 return new Promise((resolve, reject) => {
                     // if a value already has been found, skip everything else
-                    if (fieldValue !== null && fieldValue !== undefined) {
+                    if (fieldValue !== null && fieldValue !== undefined && (fieldValue instanceof Array && fieldValue.length !== 0)) {
                         return resolve();
                     }
 
@@ -390,6 +390,7 @@ module.exports = class Projection extends Module {
                         upsert: true
                     }).then(() => {
                         this.log.debug("Published " + result._id + " for " + projection);
+                        return result;
                     }, (err) => {
                         this.log.warn("Error while publishing");
                         this.log.warn(err);
