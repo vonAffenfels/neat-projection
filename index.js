@@ -5,6 +5,7 @@ const Application = require("neat-base").Application;
 const Module = require("neat-base").Module;
 const Tools = require("neat-base").Tools;
 const fs = require("fs");
+const crypto = require("crypto");
 const Promise = require("bluebird");
 
 module.exports = class Projection extends Module {
@@ -60,20 +61,11 @@ module.exports = class Projection extends Module {
 
         let protoModel = Application.modules[this.config.dbModuleName].mongoose.Model.prototype;
         protoModel.project = function (pkg, req) {
-            // check requested package for populate
             let modelName = this.constructor.modelName;
-            let populateProm = Promise.resolve();
-
-            if (self.config.projections[modelName] && self.config.projections[modelName][pkg]) {
-                let conf = self.config.projections[modelName][pkg];
-                if (conf.__populate) {
-                    populateProm = this.populate(conf.__populate).execPopulate();
-                }
-            }
-
-            return populateProm.then(() => {
-                return self.getDocumentProjection(this, pkg, req);
-            });
+            let model = Application.modules[self.config.dbModuleName].getModel(modelName);
+            return model.findOne({
+                _id: this.get("_id")
+            }).projection(pkg, req);
         };
         proto.exec = function () {
 
@@ -90,24 +82,48 @@ module.exports = class Projection extends Module {
                 return proto._neatProjectionSavedExec.apply(this, arguments);
             }
 
-            return new Promise((resolve, reject) => {
-                // check requested package for populate
-                let modelName = this.model.modelName;
-                if (self.config.projections[modelName] && self.config.projections[modelName][this._neatProjectionPackage]) {
-                    let conf = self.config.projections[modelName][this._neatProjectionPackage];
-                    if (conf.__populate) {
-                        this.populate(conf.__populate);
+            let modelName = this.model.modelName;
+            let populateConfig = null;
+            if (self.config.projections[modelName] && self.config.projections[modelName][this._neatProjectionPackage]) {
+                let conf = self.config.projections[modelName][this._neatProjectionPackage];
+                if (conf.__populate) {
+                    populateConfig = conf.__populate;
+
+                    if (!populateConfig instanceof Array) {
+                        populateConfig = [populateConfig];
                     }
                 }
+            }
 
+            return new Promise((resolve, reject) => {
                 // first run the regular query
                 return proto._neatProjectionSavedExec.apply(this, arguments).then((docs) => {
+                    let populateProm = Promise.resolve();
+
                     if (this.op === "findOne") {
-                        return self.getDocumentProjection(docs, this._neatProjectionPackage, this._neatProjectionRequest);
-                    } else {
-                        return Promise.map(docs, (doc) => {
-                            return self.getDocumentProjection(doc, this._neatProjectionPackage, this._neatProjectionRequest);
+                        if (populateConfig) {
+                            populateProm = Promise.map(populateConfig, (field) => {
+                                return docs.populate(field).execPopulate();
+                            });
+                        }
+
+                        return populateProm.then(() => {
+                            return self.getDocumentProjection(docs, this._neatProjectionPackage, this._neatProjectionRequest);
                         })
+                    } else {
+                        if (populateConfig) {
+                            populateProm = Promise.map(docs, (doc) => {
+                                return Promise.map(populateConfig, (field) => {
+                                    return doc.populate(field).execPopulate();
+                                });
+                            });
+                        }
+
+                        return populateProm.then(() => {
+                            return Promise.map(docs, (doc) => {
+                                return self.getDocumentProjection(doc, this._neatProjectionPackage, this._neatProjectionRequest);
+                            });
+                        });
                     }
                 }).then(resolve, reject);
             });
@@ -201,16 +217,15 @@ module.exports = class Projection extends Module {
 
     /**
      *
-     * @param {string} field
+     * @param {string} fieldKeyName
      * @param {string} config
      * @param {Document} doc
      * @param {Request} req
      */
-    getFieldProjection(field, config, doc, req) {
+    getFieldProjection(fieldKeyName, config, doc, req) {
         return new Promise((resolve, reject) => {
             let fields = this.getFieldArrayFromProjectionConfig(config);
             let fieldValue = null;
-            let mongoose = Application.modules[this.config.dbModuleName].mongoose;
 
             return Promise.mapSeries(fields, (field) => {
                 return new Promise((resolve, reject) => {
@@ -230,30 +245,69 @@ module.exports = class Projection extends Module {
 
                         return doc[funcName](req).then((val) => {
                             if (val !== null && val !== undefined) {
-                                fieldValue = val;
+                                // check for mongoose documents, toObject needs to be called otherwise virtuals wont be published!
+                                if (val instanceof Array) {
+                                    let newVal = [];
+                                    for (let i = 0; i < val.length; i++) {
+                                        let subArrVal = val[i];
+
+                                        if (!subArrVal) {
+                                            continue;
+                                        }
+
+                                        if (subArrVal.toObject) {
+                                            newVal.push(subArrVal.toObject({
+                                                depopulate: false,
+                                                getters: true,
+                                                virtuals: true
+                                            }));
+                                        }
+                                    }
+                                    val = newVal;
+                                } else if (val.toObject) {
+                                    let newVal = val.toObject({
+                                        depopulate: false,
+                                        getters: true,
+                                        virtuals: true
+                                    });
+                                    val = newVal;
+                                }
                             }
+
+                            fieldValue = val;
+
                             return resolve();
                         });
                     } else {
                         let value = doc.get(field);
                         if (value !== null && value !== undefined) {
 
-                            // check for mongoose documents, toJSON needs to be called otherwise virtuals wont be published!
+                            // check for mongoose documents, toObject needs to be called otherwise virtuals wont be published!
                             if (value instanceof Array) {
+                                let newVal = [];
                                 for (let i = 0; i < value.length; i++) {
                                     let subArrVal = value[i];
-                                    if (subArrVal instanceof mongoose.Model) {
-                                        value[i] = subArrVal.toJSON({
+
+                                    if (!subArrVal) {
+                                        continue;
+                                    }
+
+                                    if (subArrVal.toObject) {
+                                        newVal.push(subArrVal.toObject({
+                                            depopulate: false,
                                             getters: true,
                                             virtuals: true
-                                        });
+                                        }));
                                     }
                                 }
-                            } else if (value instanceof mongoose.Model) {
-                                value = value.toJSON({
+                                value = newVal;
+                            } else if (value.toObject) {
+                                let newVal = value.toObject({
+                                    depopulate: false,
                                     getters: true,
                                     virtuals: true
                                 });
+                                value = newVal;
                             }
 
                             fieldValue = value;
@@ -388,12 +442,18 @@ module.exports = class Projection extends Module {
                         _updatedAt: new Date()
                     }, {
                         upsert: true
-                    }).then(() => {
-                        this.log.debug("Published " + result._id + " for " + projection);
-                        return result;
+                    }).then((res) => {
+                        return publishedModel.findOne({
+                            model: modelName,
+                            projection: projection,
+                            refId: result._id
+                        }).then((doc) => {
+                            this.log.debug("Published " + result._id + " for " + projection);
+                            return result;
+                        })
                     }, (err) => {
-                        this.log.warn("Error while publishing");
-                        this.log.warn(err);
+                        this.log.error("Error while publishing");
+                        this.log.error(err);
                     });
                 });
             });
