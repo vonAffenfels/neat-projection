@@ -300,6 +300,8 @@ module.exports = class Projection extends Module {
                                             getters: true,
                                             virtuals: true
                                         }));
+                                    } else {
+                                        newVal.push(subArrVal);
                                     }
                                 }
                                 value = newVal;
