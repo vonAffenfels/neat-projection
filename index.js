@@ -370,7 +370,7 @@ module.exports = class Projection extends Module {
 
     /**
      *
-     * @param modelNamey
+     * @param modelName
      * @param _id
      * @param projection
      */
@@ -387,7 +387,7 @@ module.exports = class Projection extends Module {
             query.projection = projection;
         }
 
-        return publishedModel.remove(query);
+        return publishedModel.remove(query).exec();
     }
 
     /**
