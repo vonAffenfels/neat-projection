@@ -98,9 +98,10 @@ module.exports = class Projection extends Module {
             return new Promise((resolve, reject) => {
                 // first run the regular query
                 return proto._neatProjectionSavedExec.apply(this, arguments).then((docs) => {
+
                     let populateProm = Promise.resolve();
 
-                    if (this.op === "findOne") {
+                    if (this.op === "findOne" && docs) {
                         if (populateConfig) {
                             populateProm = Promise.map(populateConfig, (field) => {
                                 return docs.populate(field).execPopulate();
@@ -110,7 +111,7 @@ module.exports = class Projection extends Module {
                         return populateProm.then(() => {
                             return self.getDocumentProjection(docs, this._neatProjectionPackage, this._neatProjectionRequest);
                         })
-                    } else {
+                    } else if (docs) {
                         if (populateConfig) {
                             populateProm = Promise.map(docs, (doc) => {
                                 return Promise.map(populateConfig, (field) => {
@@ -125,6 +126,8 @@ module.exports = class Projection extends Module {
                             });
                         });
                     }
+
+                    return populateProm;
                 }).then(resolve, reject);
             });
         }
