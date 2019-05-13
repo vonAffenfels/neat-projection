@@ -372,6 +372,19 @@ module.exports = class Projection extends Module {
         });
     }
 
+    processPublishQueue() {
+        let publishQueueModel = Application.modules[this.config.dbModuleName].getModel("publish_queue");
+
+        return publishQueueModel.find({}).then((docs) => {
+            this.log.info("Publish queue with " + docs.length + " entries");
+            return Promise.each(docs, (doc) => {
+                return this.publish(doc.model, doc.refId);
+            }, {
+                concurrency: 50
+            })
+        });
+    }
+
     /**
      *
      * @param modelName
