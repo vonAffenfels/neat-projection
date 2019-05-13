@@ -39,6 +39,7 @@ module.exports = class Projection extends Module {
             // only register the models if needed, pointless otherwise...
             if (this.config.publish) {
                 Application.modules[this.config.dbModuleName].registerModel("published", require("./models/published.js"));
+                Application.modules[this.config.dbModuleName].registerModel("publish_queue", require("./models/publish_queue.js"));
             }
 
             this.initMongoose();
@@ -76,9 +77,9 @@ module.exports = class Projection extends Module {
 
             // dont do anything on save/count/...
             if ([
-                    "find",
-                    "findOne"
-                ].indexOf(this.op) === -1) {
+                "find",
+                "findOne"
+            ].indexOf(this.op) === -1) {
                 return proto._neatProjectionSavedExec.apply(this, arguments);
             }
 
@@ -380,6 +381,7 @@ module.exports = class Projection extends Module {
     depublish(modelName, _id, projection) {
         this.log.debug("Depublishing " + modelName + " with id " + _id);
         let publishedModel = Application.modules[this.config.dbModuleName].getModel("published");
+        let publishQueueModel = Application.modules[this.config.dbModuleName].getModel("publish_queue");
         let query = {
             refId: _id,
             model: modelName
@@ -390,7 +392,17 @@ module.exports = class Projection extends Module {
             query.projection = projection;
         }
 
-        return publishedModel.remove(query).exec();
+        return publishQueueModel.update(query, {
+            $set: query
+        }, {
+            upsert: true
+        }).then(() => {
+            return publishedModel.remove(query).exec().then((result) => {
+                return publishQueueModel.remove(query).exec().then(() => {
+                    return result;
+                });
+            });
+        });
     }
 
     /**
@@ -407,60 +419,78 @@ module.exports = class Projection extends Module {
 
         let publishConfig = this.config.publish[modelName];
         let publishedModel = Application.modules[this.config.dbModuleName].getModel("published");
+        let publishQueueModel = Application.modules[this.config.dbModuleName].getModel("publish_queue");
         let model = Application.modules[this.config.dbModuleName].getModel(modelName);
+        let queueQuery = {
+            model: modelName,
+            refId: _id
+        };
 
-        // get the original doc
-        return model.findOne({
-            _id: _id
-        }).then((doc) => {
-            return Promise.map(Object.keys(publishConfig), (projection) => {
-                // Check if there are any conditions to this publication, if so check them
-                let shouldPublish = true;
-                if (publishConfig[projection] !== true && publishConfig[projection].condition) {
-                    for (let path in publishConfig[projection].condition) {
-                        let value = publishConfig[projection].condition[path];
-                        let docValue = doc.get(path);
+        return publishQueueModel.update(queueQuery, {
+            $set: queueQuery
+        }, {
+            upsert: true
+        }).then(() => {
+            // get the original doc
+            return model.findOne({
+                _id: _id
+            }).then((doc) => {
+                return Promise.map(Object.keys(publishConfig), (projection) => {
 
-                        this.log.debug("Checking publish condition on " + path + " with required value " + value + " document value is " + docValue);
-                        if (docValue != value) {
-                            this.log.debug("Condition didnt pass, dont publish");
-                            shouldPublish = false;
+                    // Check if there are any conditions to this publication, if so check them
+                    let shouldPublish = true;
+                    if (publishConfig[projection] !== true && publishConfig[projection].condition) {
+                        for (let path in publishConfig[projection].condition) {
+                            let value = publishConfig[projection].condition[path];
+                            let docValue = doc.get(path);
+
+                            this.log.debug("Checking publish condition on " + path + " with required value " + value + " document value is " + docValue);
+                            if (docValue != value) {
+                                this.log.debug("Condition didnt pass, dont publish");
+                                shouldPublish = false;
+                            }
                         }
                     }
-                }
 
-                // Conditions failed, so depublish this document in case it was published earlier
-                if (!shouldPublish) {
-                    return this.depublish(modelName, _id, projection);
-                }
+                    // Conditions failed, so depublish this document in case it was published earlier
+                    if (!shouldPublish) {
+                        return this.depublish(modelName, _id, projection).then(depublishResult => {
+                            return publishQueueModel.remove(queueQuery).exec().then(() => {
+                                return depublishResult;
+                            });
+                        });
+                    }
 
-                // get the projection
-                return doc.project(projection).then((result) => {
-                    // upsert the final published document
-                    return publishedModel.update({
-                        model: modelName,
-                        projection: projection,
-                        refId: result._id
-                    }, {
-                        model: modelName,
-                        projection: projection,
-                        data: result,
-                        refId: result._id,
-                        _updatedAt: new Date()
-                    }, {
-                        upsert: true
-                    }).then((res) => {
-                        return publishedModel.findOne({
+                    // get the projection
+                    return doc.project(projection).then((result) => {
+                        // upsert the final published document
+                        return publishedModel.update({
                             model: modelName,
                             projection: projection,
                             refId: result._id
-                        }).then((doc) => {
-                            this.log.debug("Published " + result._id + " for " + projection);
-                            return result;
-                        })
-                    }, (err) => {
-                        this.log.error("Error while publishing");
-                        this.log.error(err);
+                        }, {
+                            model: modelName,
+                            projection: projection,
+                            data: result,
+                            refId: result._id,
+                            _updatedAt: new Date()
+                        }, {
+                            upsert: true
+                        }).then((res) => {
+                            return publishedModel.findOne({
+                                model: modelName,
+                                projection: projection,
+                                refId: result._id
+                            }).then((doc) => {
+                                this.log.debug("Published " + result._id + " for " + projection);
+                                return publishQueueModel.remove(queueQuery).exec().then(() => {
+                                    return result;
+                                });
+                            })
+                        }, (err) => {
+                            this.log.error("Error while publishing");
+                            this.log.error(err);
+                        });
                     });
                 });
             });
