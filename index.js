@@ -451,7 +451,7 @@ module.exports = class Projection extends Module {
 
                 if (!doc) {
                     this.log.info("Doc to publish not found, deleting");
-                    return this.depublish(modelName, _id, projection).then(depublishResult => {
+                    return this.depublish(modelName, _id).then(depublishResult => {
                         return publishQueueModel.remove(queueQuery).exec().then(() => {
                             return depublishResult;
                         });
