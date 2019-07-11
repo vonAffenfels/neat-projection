@@ -448,6 +448,16 @@ module.exports = class Projection extends Module {
             return model.findOne({
                 _id: _id
             }).then((doc) => {
+
+                if (!doc) {
+                    this.log.info("Doc to publish not found, deleting");
+                    return this.depublish(modelName, _id, projection).then(depublishResult => {
+                        return publishQueueModel.remove(queueQuery).exec().then(() => {
+                            return depublishResult;
+                        });
+                    });
+                }
+
                 return Promise.map(Object.keys(publishConfig), (projection) => {
 
                     // Check if there are any conditions to this publication, if so check them
