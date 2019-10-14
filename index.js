@@ -463,14 +463,26 @@ module.exports = class Projection extends Module {
                     // Check if there are any conditions to this publication, if so check them
                     let shouldPublish = true;
                     if (publishConfig[projection] !== true && publishConfig[projection].condition) {
-                        for (let path in publishConfig[projection].condition) {
+                        for (let item in publishConfig[projection].condition) {
+                            let path = item;
+                            let ne = path.startsWith('!');
+                            if (ne) {
+                                path = item.slice(1);
+                            }
+
                             let value = publishConfig[projection].condition[path];
                             let docValue = doc.get(path);
 
                             this.log.debug("Checking publish condition on " + path + " with required value " + value + " document value is " + docValue);
+
                             if (docValue != value) {
+                                shouldPublish = ne;
+                            } else {
+                                shouldPublish = !ne;
+                            }
+
+                            if (!shouldPublish) {
                                 this.log.debug("Condition didnt pass, dont publish");
-                                shouldPublish = false;
                             }
                         }
                     }
