@@ -12,7 +12,9 @@
   },
   "author": "Dominik Kienzler <d.kienzler@dominik-kienzler.de>",
   "license": "ISC",
-  "dependencies": {},
+  "dependencies": {
+    "password-hash": "^1.2.2"
+  },
   "peerDependencies": {
     "bluebird": "^3.4.6",
     "neat-base": "^1.x.x",
