@@ -32,7 +32,8 @@ let schema = new mongoose.Schema({
         count: false,
         save: false,
         remove: false
-    }
+    },
+    read: 'secondaryPreferred',
 });
 
 module.exports = schema;
