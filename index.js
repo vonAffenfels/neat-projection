@@ -378,7 +378,12 @@ module.exports = class Projection extends Module {
         return publishQueueModel.find({}).then((docs) => {
             this.log.info("Publish queue with " + docs.length + " entries");
             return Promise.each(docs, (doc) => {
-                return this.publish(doc.model, doc.refId);
+                // take the stored projection into account
+                let projections = null;
+                if(doc.projection){
+                    projections = [doc.projection];
+                }
+                return this.publish(doc.model, doc.refId, projections);
             }, {
                 concurrency: 50
             })
