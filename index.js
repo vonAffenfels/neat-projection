@@ -422,9 +422,10 @@ module.exports = class Projection extends Module {
      *
      * @param modelName
      * @param _id
+     * @param {String[]} projections Default null, if set then only these projections will be published (if conditions are met)
      * @returns {Promise.<T>}
      */
-    publish(modelName, _id) {
+    publish(modelName, _id, projections = null) {
         // dont do anything if it doesnt exist
         if (!this.config.publish || !this.config.publish[modelName]) {
             return Promise.resolve();
@@ -462,6 +463,11 @@ module.exports = class Projection extends Module {
 
                     // Check if there are any conditions to this publication, if so check them
                     let shouldPublish = true;
+
+                    if(projections && projections.length && projections.indexOf(projection) === -1){
+                        return null;
+                    }
+
                     if (publishConfig[projection] !== true && publishConfig[projection].condition) {
                         for (let item in publishConfig[projection].condition) {
                             let path = item;
