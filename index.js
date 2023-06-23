@@ -378,12 +378,7 @@ module.exports = class Projection extends Module {
         return publishQueueModel.find({}).then((docs) => {
             this.log.info("Publish queue with " + docs.length + " entries");
             return Promise.each(docs, (doc) => {
-                // take the stored projection into account
-                let projections = null;
-                if(doc.projection){
-                    projections = [doc.projection];
-                }
-                return this.publish(doc.model, doc.refId, projections);
+                return this.publish(doc.model, doc.refId, doc.projection);
             }, {
                 concurrency: 50
             })
@@ -427,10 +422,10 @@ module.exports = class Projection extends Module {
      *
      * @param modelName
      * @param _id
-     * @param {String[]} projections Default null, if set then only these projections will be published (if conditions are met)
+     * @param {String} targetProjection Default null, if set then only this projection will be published (if conditions are met)
      * @returns {Promise.<T>}
      */
-    publish(modelName, _id, projections = null) {
+    publish(modelName, _id, targetProjection = null) {
         // dont do anything if it doesnt exist
         if (!this.config.publish || !this.config.publish[modelName]) {
             return Promise.resolve();
@@ -444,6 +439,9 @@ module.exports = class Projection extends Module {
             model: modelName,
             refId: _id
         };
+        if(targetProjection){
+            queueQuery["projection"] = targetProjection;
+        }
 
         return publishQueueModel.update(queueQuery, {
             $set: queueQuery
@@ -469,7 +467,7 @@ module.exports = class Projection extends Module {
                     // Check if there are any conditions to this publication, if so check them
                     let shouldPublish = true;
 
-                    if(projections && projections.length && projections.indexOf(projection) === -1){
+                    if(targetProjection && projection !== targetProjection){
                         return null;
                     }
 
