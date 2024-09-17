@@ -472,27 +472,46 @@ module.exports = class Projection extends Module {
                     }
 
                     if (publishConfig[projection] !== true && publishConfig[projection].condition) {
-                        for (let item in publishConfig[projection].condition) {
-                            let path = item;
-                            let ne = path.startsWith('!');
-                            if (ne) {
-                                path = item.slice(1);
+                        const checkCondition = (condition) => {
+                            let shouldPublish = true;
+                            for (let item in condition) {
+                                let path = item;
+                                let ne = path.startsWith('!');
+                                if (ne) {
+                                    path = item.slice(1);
+                                }
+
+                                let value = condition[item];
+                                let docValue = doc.get(path);
+
+                                this.log.debug("Checking publish condition on " + path + " with (required: " + !ne + ") value " + value + " document value is " + docValue);
+
+                                if (docValue != value) {
+                                    shouldPublish = ne;
+                                } else {
+                                    shouldPublish = !ne;
+                                }
+
+                                if (!shouldPublish) {
+                                    this.log.debug("Condition didnt pass, dont publish");
+                                    return shouldPublish;
+                                }
                             }
+                            return shouldPublish;
+                        }
 
-                            let value = publishConfig[projection].condition[item];
-                            let docValue = doc.get(path);
-
-                            this.log.debug("Checking publish condition on " + path + " with (required: " + !ne + ") value " + value + " document value is " + docValue);
-
-                            if (docValue != value) {
-                                shouldPublish = ne;
-                            } else {
-                                shouldPublish = !ne;
+                        const condition = publishConfig[projection].condition;
+                        if(condition.hasOwnProperty("length")){
+                            for (let i = 0; i < condition.length; i++) {
+                                const conditionElement = condition[i];
+                                shouldPublish = checkCondition(conditionElement);
+                                if(!shouldPublish){
+                                    break;
+                                }
                             }
-
-                            if (!shouldPublish) {
-                                this.log.debug("Condition didnt pass, dont publish");
-                            }
+                        }
+                        else {
+                            shouldPublish = checkCondition(condition);
                         }
                     }
 
